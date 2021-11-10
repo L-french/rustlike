@@ -12,10 +12,14 @@ struct ConsolePosition {
     y: usize,
 }
 
-struct Renderable {
-    glyph: char,
-    fg: Color,
-    bg: Color,
+struct Foreground {
+    glyph_index: usize,
+    fg_color: Color,
+}
+
+struct Background {
+    bg_color: Color,
+    // bg_material: Handle<ColorMaterial>,
 }
 
 struct Console {
@@ -33,10 +37,22 @@ fn on_window_resize(windows: ResMut<Windows>, mut console: ResMut<Console>, mut 
 
 fn render_console(
     console: Res<Console>,
-    mut query: Query<(&ConsolePosition, &mut Transform)>,
+    mut query: QuerySet<(  
+        Query<(&ConsolePosition, &Foreground, &mut Transform, &mut TextureAtlasSprite)>,
+        Query<(&ConsolePosition, &Background, &mut Transform, &mut TextureAtlasSprite)>,
+    )>
 ) {
-    for (position, mut transform) in query.iter_mut() {
-        transform.translation = get_position_translation(&position, &console);
+    for (position, fg, mut transform, mut sprite) in query.q0_mut().iter_mut() {
+        let (x, y) = get_position_translation(position, &console);
+        transform.translation = Vec3::new(x, y, 1.0);
+        sprite.index = fg.glyph_index as u32;
+        sprite.color = fg.fg_color;
+    }
+
+    for (position, bg, mut transform, mut sprite) in query.q1_mut().iter_mut() {
+        let (x, y) = get_position_translation(position, &console);
+        transform.translation = Vec3::new(x, y, 0.0);
+        sprite.color = bg.bg_color;
     }
 }
 
@@ -44,13 +60,22 @@ fn render_console(
     
 // }
 
-fn get_position_translation(position: &ConsolePosition, console: &Console) -> Vec3 {
+fn get_position_translation(position: &ConsolePosition, console: &Console) -> (f32, f32) {
     let x: f32 = TILE_SIZE as f32 * (0.5 + position.x as f32 - (console.width as f32) / 2.0);
     let y: f32 = TILE_SIZE as f32 * (0.5 + position.y as f32 - (console.height as f32) / 2.0);
-    Vec3::new(x, y, 0.0)
+    (x, y)
     // Transform::from_xyz(x, y, 0.0)
     // Transform::from_scale(Vec3::splat(6.0))
 }
+
+// fn get_glyph_index(glyph: &char) -> u32 {
+//     match glyph {
+//         '@' => 64,
+//         '.' => 46,
+//         _ => 47,
+//         ''
+//     }
+// }
 
 // fn animate_sprite_system(
 //     time: Res<Time>,
@@ -69,28 +94,67 @@ fn get_position_translation(position: &ConsolePosition, console: &Console) -> Ve
 
 fn setup(
     mut commands: Commands,
+    // mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    console: Res<Console>,
+    // console: Res<Console>,
 ) {
     let texture_handle = asset_server.load("cheepicus12.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(12.0, 12.0), 16, 16);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
+    // commands.insert_resource(Background {
+    //     bg_material: materials.add(Color::GREEN.into()),
+    // });
+
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(SpriteSheetBundle {
-        texture_atlas: texture_atlas_handle,
+        texture_atlas: texture_atlas_handle.clone(),
         // transform: get_position_transform(ConsolePosition{x: 10, y: 10}, Console{width: console.width, height: console.height}),
-        sprite: TextureAtlasSprite::new(3),
+        sprite: TextureAtlasSprite::new(32),
         ..Default::default()
     })
         .insert(ConsolePosition{x: 10, y: 10})
         
-        .insert(Renderable{
-            glyph: '@', 
-            fg: Color::Rgba{ red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 }, 
-            bg: Color::Rgba{ red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 }
+        .insert(Foreground{
+            glyph_index: 64, 
+            fg_color: Color::BLUE, 
         });
+    
+    
+    for i in 0..40 {
+        for j in 0..40 {
+            commands
+                .spawn_bundle(SpriteSheetBundle {
+                    texture_atlas: texture_atlas_handle.clone(),
+                    // transform: get_position_transform(ConsolePosition{x: 10, y: 10}, Console{width: console.width, height: console.height}),
+                    sprite: TextureAtlasSprite::new(0),
+                    ..Default::default()
+                })
+                
+                .insert(ConsolePosition{x: i, y: j})
+                .insert(Foreground{
+                    glyph_index: 46, 
+                    fg_color: Color::RED,
+                });
+        }
+    }
+    for i in 0..40 {
+        for j in 0..40 {
+            commands
+                .spawn_bundle(SpriteSheetBundle {
+                    texture_atlas: texture_atlas_handle.clone(),
+                    // transform: get_position_transform(ConsolePosition{x: 10, y: 10}, Console{width: console.width, height: console.height}),
+                    sprite: TextureAtlasSprite::new(219),
+                    ..Default::default()
+                })
+                
+                .insert(ConsolePosition{x: i, y: j})
+                .insert(Background{
+                    bg_color: Color::GREEN,
+                });
+        }
+    }
 }
 
 fn main() {
