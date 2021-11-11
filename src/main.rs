@@ -13,11 +13,12 @@ struct ConsolePosition {
 }
 
 
-// struct Renderable; glyph, fg, bg, priority
+// TODO: create new() method to ease console clearing, etc.
 #[derive(Clone)]
 struct Renderable {
     glyph: u32,
     fg_color: Color,
+    // TODO: implement as Option<Color>, rather than using Color::NONE
     bg_color: Color,
     priority: usize,
 }
@@ -94,37 +95,54 @@ fn on_window_resize(
 
 fn render_console(
     mut console: ResMut<Console>,
-    mut renderable_query: Query<(&ConsolePosition, &Renderable)>,
+    renderable_query: Query<(&ConsolePosition, &Renderable)>,
     mut sprite_query: QuerySet<(  
         Query<(&ConsolePosition, &mut TextureAtlasSprite), With<Foreground>>,
         Query<(&ConsolePosition, &mut TextureAtlasSprite), With<Background>>,
     )>
 ) {
+    // clear buffer
+    for i in console.buffer.iter_mut() {
+
+    }
+
+
     for (position, renderable) in renderable_query.iter() {
-        if renderable.fg_color != Color::NONE {
-            console.buffer[get_buffer_index(position)].glyph = renderable.glyph;
-            console.buffer[get_buffer_index(position)].fg_color = renderable.fg_color;
-        }
-        if renderable.bg_color != Color::NONE {
-            console.buffer[get_buffer_index(position)].bg_color = renderable.bg_color;
+        let buffer_index = get_buffer_index(position, &console);
+        // ignore if we would go outside boundaries of console buffer
+        // which can happen if the buffer hasn't been initialized yet
+        if buffer_index < console.buffer.len() {
+            if renderable.bg_color != Color::NONE {
+                console.buffer[buffer_index].bg_color = renderable.bg_color;
+            }
+            if renderable.priority >= console.buffer[buffer_index].priority {
+                console.buffer[buffer_index].glyph = renderable.glyph;
+                console.buffer[buffer_index].fg_color = renderable.fg_color;
+                console.buffer[buffer_index].priority = renderable.priority;
+
+            }
         }
     }
 
     for (position, mut sprite) in sprite_query.q0_mut().iter_mut() {
-        sprite.index = console.buffer[get_buffer_index(position)].glyph;
-        sprite.color = console.buffer[get_buffer_index(position)].fg_color;
-
+        let buffer_index = get_buffer_index(position, &console);
+        if buffer_index < console.buffer.len() {
+            sprite.index = console.buffer[buffer_index].glyph;
+            sprite.color = console.buffer[buffer_index].fg_color;
+        }
     }
     for (position, mut sprite) in sprite_query.q1_mut().iter_mut() {
-        sprite.color = console.buffer[get_buffer_index(position)].bg_color;
-
+        let buffer_index = get_buffer_index(position, &console);
+        if buffer_index < console.buffer.len() {
+            sprite.color = console.buffer[buffer_index].bg_color;
+        }
     }
     // TODO: use ColorMaterial for terminal background, using update method in examples/3d/spawner?
 }
 
-
-fn get_buffer_index(pos: &ConsolePosition) -> usize {
-    0
+// TODO: implement as Option<usize> to catch positions which fall outside the console boundaries
+fn get_buffer_index(pos: &ConsolePosition, console: &Console) -> usize {
+    pos.x + (pos.y * console.width)
 }
 
 fn get_position_transform(position: &ConsolePosition, console: &Console, z: f32) -> Transform {
@@ -140,25 +158,16 @@ fn setup(
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
-    let texture_handle = asset_server.load("cheepicus12.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(12.0, 12.0), 16, 16);
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
-
     // commands.insert_resource(Background {
     //     bg_material: materials.add(Color::GREEN.into()),
     // });
 
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
-    commands.spawn_bundle(SpriteSheetBundle {
-        texture_atlas: texture_atlas_handle.clone(),
-        // transform: get_position_transform(ConsolePosition{x: 10, y: 10}, Console{width: console.width, height: console.height}),
-        sprite: TextureAtlasSprite::new(32),
-        ..Default::default()
-    })
+    commands
+        .spawn()
         .insert(ConsolePosition{x: 10, y: 10})
-        
         .insert(Renderable {
-            glyph: 46, 
+            glyph: 64, 
             fg_color: Color::BLUE,
             bg_color: Color::NONE,
             priority: 5
@@ -185,6 +194,7 @@ fn main() {
         .insert_resource(Console{width: 40, height: 10, buffer: vec![Renderable { glyph: 0, fg_color: Color::NONE, bg_color: Color::NONE, priority: 0 }]})
         // .add_startup_system(make_player.system())
         .add_startup_system(setup.system())
+        .add_startup_system(on_window_resize.system())
         .add_system(on_window_resize.system())
         .add_system(render_console.system())
         // .add_system(animate_sprite_system.system())
