@@ -8,7 +8,11 @@ impl Plugin for TerminalPlugin {
     fn build(&self, app:&mut AppBuilder) {
         app.insert_resource(Terminal::new())
             .add_system(on_window_resize.system())
-            .add_system(render_terminal.system());
+            .add_system_set_to_stage(
+                CoreStage::PostUpdate,
+                SystemSet::new()
+                    .with_system(render_terminal.system())
+            );
             // TODO: add stages to rendering, putting window resizes, game logic before render_terminal
     }
 }
@@ -18,6 +22,7 @@ pub struct MapPosition {
     pub y: isize,
 }
 
+#[derive(PartialEq)]
 pub struct TerminalPosition {
     pub x: usize,
     pub y: usize,
