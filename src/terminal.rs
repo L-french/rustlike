@@ -1,4 +1,6 @@
-use bevy::{prelude::*, window::WindowResized};
+use bevy::{prelude::*, reflect::Map, window::WindowResized};
+
+use crate::map::{MapTransform};
 
 const TILE_SIZE: usize = 12;
 
@@ -17,9 +19,26 @@ impl Plugin for TerminalPlugin {
     }
 }
 
+#[derive(PartialEq)]
 pub struct MapPosition {
     pub x: isize,
     pub y: isize,
+}
+
+impl MapPosition {
+    fn as_terminal(&self, transform: &Res<MapTransform>, terminal: &Terminal) -> Option<TerminalPosition> {
+        let translated_x = self.x + transform.x;
+        let translated_y = self.y + transform.y;
+
+        // return position only if inside terminal boundaries
+        if translated_x < terminal.width as isize && translated_y < terminal.height as isize {
+            return Some(TerminalPosition {
+                x: translated_x as usize,
+                y: translated_y as usize,
+            })
+        }
+        None
+    }
 }
 
 #[derive(PartialEq)]
@@ -40,6 +59,7 @@ pub struct Renderable {
 }
 
 pub struct Foreground {}
+
 pub struct Background {}
 
 struct Terminal {
@@ -123,7 +143,8 @@ fn on_window_resize(
 
 fn render_terminal(
     mut terminal: ResMut<Terminal>,
-    renderable_query: Query<(&TerminalPosition, &Renderable)>,
+    map_transfrom: Res<MapTransform>,
+    renderable_query: Query<(&MapPosition, &Renderable)>, // TODO: also query for terminalposition entities for ui, etc.
     mut sprite_query: QuerySet<(  
         Query<(&TerminalPosition, &mut TextureAtlasSprite), With<Foreground>>,
         Query<(&TerminalPosition, &mut TextureAtlasSprite), With<Background>>,
@@ -138,20 +159,24 @@ fn render_terminal(
 
 
     for (position, renderable) in renderable_query.iter() {
-        let buffer_index = get_buffer_index(position, &terminal);
-        // skip if we would go outside boundaries of terminal buffer
-        // which can happen if the buffer hasn't been initialized yet
-        if buffer_index < terminal.buffer.len() {
-            if renderable.bg_color != Color::NONE {
-                terminal.buffer[buffer_index].bg_color = renderable.bg_color;
-            }
-            if renderable.priority >= terminal.buffer[buffer_index].priority {
-                terminal.buffer[buffer_index].glyph = renderable.glyph;
-                terminal.buffer[buffer_index].fg_color = renderable.fg_color;
-                terminal.buffer[buffer_index].priority = renderable.priority;
+        let terminal_pos = position.as_terminal(&map_transfrom, &terminal);
+        if let Some(pos) = terminal_pos {
+            let buffer_index = get_buffer_index(&pos, &terminal);
+            // skip if we would go outside boundaries of terminal buffer
+            // which can happen if the buffer hasn't been initialized yet
+            if buffer_index < terminal.buffer.len() {
+                if renderable.bg_color != Color::NONE {
+                    terminal.buffer[buffer_index].bg_color = renderable.bg_color;
+                }
+                if renderable.priority >= terminal.buffer[buffer_index].priority {
+                    terminal.buffer[buffer_index].glyph = renderable.glyph;
+                    terminal.buffer[buffer_index].fg_color = renderable.fg_color;
+                    terminal.buffer[buffer_index].priority = renderable.priority;
 
+                }
             }
         }
+        
     }
 
     for (position, mut sprite) in sprite_query.q0_mut().iter_mut() {
@@ -170,7 +195,8 @@ fn render_terminal(
     // TODO: use ColorMaterial for terminal background, using update method in examples/3d/spawner?
 }
 
-// TODO: implement as Option<usize> to catch positions which fall outside the terminal boundaries
+// TODO: implement as Option<usize> to catch positions which fall outside the terminal boundaries 
+// if we leave terminalposition public, there aren't guarantees that this will be inside bounds
 fn get_buffer_index(pos: &TerminalPosition, terminal: &Terminal) -> usize {
     pos.x + (pos.y * terminal.width)
 }
