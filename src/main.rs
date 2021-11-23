@@ -1,6 +1,8 @@
 use bevy::prelude::*;
+// public modules?
 mod terminal;
 mod map;
+mod rect;
 use terminal::*;
 use map::*;
 
@@ -69,7 +71,7 @@ fn setup(
             bg_color: Color::NONE,
             priority: 5
         });
-    spawn_debug_map(commands);
+    spawn_map(commands);
 }
 
 fn main() {

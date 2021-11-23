@@ -2,8 +2,6 @@ use bevy::{prelude::*, reflect::Map, window::WindowResized};
 
 use crate::map::{MapTransform};
 
-use crate::map::{MapTransform};
-
 const TILE_SIZE: usize = 12;
 
 pub struct TerminalPlugin;
